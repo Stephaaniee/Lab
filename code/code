@@ -1,0 +1,1180 @@
+#define EnableRight 5 	  //motorcontroller
+#define InputOneRight A1
+#define InputTwoRight A0
+#define EnableLeft 10
+#define InputOneLeft A3
+#define InputTwoLeft A2
+
+#define RightSensor 2 //line sensor
+#define LeftSensor 4
+
+#define Echo 13 //ultrasonic sensor
+#define Trig 12
+
+#define S0 11 //color sensor
+#define S1 9
+#define S2 8
+#define S3 7
+#define sensorOut 6
+
+int sensorR; //line sensor
+int sensorL;
+
+long duration; //ultrasonic sensor
+int distance;
+
+int speed; //speed for the right wheel
+int speedL; //speed for the left wheel
+int time = 10;
+
+int greenFrequency; //values for the color sensor
+int redFrequency;
+int blueFrequency;
+
+int green = 0; //current coordinates
+int turq = 0;
+int orange = 0;
+int purple = 0;
+
+int x1 = 1; //first coordinate
+int y1 = 2;
+
+int x2 = 2; //second coordinate
+int y2 = 3;
+
+int x3 = 1; //third coordinate
+int y3 = 1;
+
+int x0 = 0; //final cooardinate
+int y0 = 0; //always [0,0]
+
+enum Status {stGreen, stTurq, stOrange, stPurple}; //status for the current color
+Status status = stPurple;
+
+enum Run {stStraightNorth, stStraightEast, stStraightSouth, stStraightWest, stSpinNorth, stSpinEast, stSpinSouth, stSpinWest , stStop, stSpinNorthLeft, stSpinEastLeft, stSpinSouthLeft, stSpinWestLeft};
+Run run = stStraightNorth; //status for the current movement
+
+enum Turn {turnOne, turnTwo, turnThree, turnZero}; //status for which coordinate is driven to
+Turn turn = turnOne;
+
+boolean cGreen; //variables for the color that the color sensor sees
+boolean cTurq;
+boolean cOrange;
+boolean cPurple;
+boolean cBlack;
+
+boolean north =  true; //variables for the current direction of the car
+boolean south = false;
+boolean west =  false;
+boolean east = false;
+
+void setup()
+  {
+    Serial.begin(9600);
+    pinMode(EnableRight, OUTPUT);
+    pinMode(InputOneRight, OUTPUT);
+    pinMode(InputTwoRight, OUTPUT);
+    pinMode(EnableLeft, OUTPUT);
+    pinMode(InputOneLeft, OUTPUT);
+    pinMode(InputTwoLeft, OUTPUT);
+    
+    pinMode(RightSensor, INPUT);
+    pinMode(LeftSensor, INPUT);
+    
+    pinMode(Trig,OUTPUT);
+    pinMode(Echo,INPUT);
+    
+    pinMode(S0, OUTPUT);
+    pinMode(S1, OUTPUT);
+    pinMode(S2, OUTPUT);
+    pinMode(S3, OUTPUT);
+    pinMode(sensorOut, INPUT);
+  }
+
+void readColor() //function for detecting the colors on the ground
+  {
+    digitalWrite(S0, LOW);
+    digitalWrite(S1, HIGH);
+  
+    digitalWrite(S2,LOW); //reading the red frequency
+    digitalWrite(S3,LOW);
+    redFrequency = pulseIn(sensorOut,LOW);
+    delay(10);
+  
+    digitalWrite(S2, HIGH); //reading the green frequency
+    digitalWrite(S3, HIGH);
+    greenFrequency = pulseIn(sensorOut, LOW);
+    delay(10);
+  
+    digitalWrite(S2, LOW); //reading the blue frequency
+    digitalWrite(S3, HIGH);
+    blueFrequency = pulseIn(sensorOut, LOW);
+    delay(10);
+
+    if(redFrequency > 275 && greenFrequency > 405 && blueFrequency < 320) //frequency range for purple
+      {
+        Serial.print("\npurple \n\n");
+        cPurple = true;
+        cGreen = false;
+        cTurq = false;
+        cOrange = false;
+        cBlack = false;
+      }
+
+    else if(redFrequency > 215 && greenFrequency > 135 && blueFrequency < 255)//frequency range for turquoise
+      {
+        Serial.print("\nturquoise \n\n");
+        cTurq = true;
+        cGreen = false;
+        cOrange = false;
+        cPurple = false;
+        cBlack = false;
+      }
+
+    else if(redFrequency > 165 && greenFrequency < 190 && blueFrequency > 170) //frequency range for green
+      {
+        Serial.print("\ngreen \n\n");
+        cGreen = true;
+        cTurq = false;
+        cOrange = false;
+        cPurple = false;
+        cBlack = false;
+      }
+
+    else if(redFrequency < 135 && greenFrequency < 300 && blueFrequency > 110) //frequency range for orange
+      {
+        Serial.print("\norange \n\n");
+        cOrange = true;
+        cGreen = false;
+        cTurq = false;
+        cPurple = false;
+        cBlack = false;
+      }
+
+    else if(redFrequency > 600 && greenFrequency > 600 && blueFrequency < 600) //frequency range for grey
+      {
+        Serial.print("\ngrey\n");
+        cGreen = false;
+        cTurq = false;
+        cOrange = false;
+        cPurple = false;
+        cBlack = true;
+      }
+
+    else if(redFrequency > 700 && greenFrequency > 700 && blueFrequency > 600) //frequency range for black
+      {
+        cGreen = false;
+        cTurq = false;
+        cOrange = false;
+        cPurple = false;
+        cBlack = true;
+      }
+
+    else if(redFrequency < 120 && greenFrequency < 120 && blueFrequency < 120) //frequency range for white
+      {
+        Serial.print("\nwhite \n\n");
+      }
+
+    else
+      {
+        Serial.print("\nColor not registered \n\n");
+      }
+ }
+
+void measureDistance() //function for measuring the distance with the ultrasonic sensor
+  {
+    digitalWrite(Trig, LOW);
+    delayMicroseconds(time/5);
+    digitalWrite(Trig, HIGH);
+    delayMicroseconds(time);
+    digitalWrite(Trig, LOW);
+    duration = pulseIn(Echo, HIGH);
+    distance = duration*0.034/2;
+  }
+
+void straight() //function for driving forward
+  {
+    analogWrite(EnableRight, speed); //right wheel
+    digitalWrite(InputOneRight, LOW);
+    digitalWrite(InputTwoRight, HIGH);
+
+    analogWrite(EnableLeft, speedL); //left wheel
+    digitalWrite(InputOneLeft, LOW);
+    digitalWrite(InputTwoLeft, HIGH);
+  }
+
+void turnRight() //function for turning to the rigth
+  {
+    analogWrite(EnableRight, speed); //right wheel
+    digitalWrite(InputOneRight, LOW);
+    digitalWrite(InputTwoRight, LOW);
+
+    analogWrite(EnableLeft, speedL); //left wheel
+    digitalWrite(InputOneLeft, LOW);
+    digitalWrite(InputTwoLeft, HIGH);
+  }
+
+void turnLeft() //function for turning to the left
+  {
+    analogWrite(EnableRight, speed-10); //right wheel
+    digitalWrite(InputOneRight, LOW);
+    digitalWrite(InputTwoRight, HIGH);
+
+    analogWrite(EnableLeft, speedL); //left wheel
+    digitalWrite(InputOneLeft, LOW);
+    digitalWrite(InputTwoLeft, LOW);
+  }
+
+void stop() //function for stopping
+  {
+    digitalWrite(InputOneRight, LOW); //right wheel
+    digitalWrite(InputTwoRight, LOW);
+    analogWrite(EnableRight, speed);
+  
+    digitalWrite(InputOneLeft, LOW); //left wheel
+    digitalWrite(InputTwoLeft, LOW);
+    analogWrite(EnableLeft, speedL);
+  }
+
+void spinR() //function for spinning to the right
+  {
+    analogWrite(EnableRight, speed-15); //right wheel
+    digitalWrite(InputOneRight, HIGH);
+    digitalWrite(InputTwoRight, LOW);
+
+    analogWrite(EnableLeft, speedL); //left wheel
+    digitalWrite(InputOneLeft, LOW);
+    digitalWrite(InputTwoLeft, HIGH);
+   
+  }
+
+void spinL() //function for spinning to the left
+  {
+    analogWrite(EnableRight, speed-8); //right wheel
+    digitalWrite(InputOneRight, LOW);
+    digitalWrite(InputTwoRight, HIGH);
+
+    analogWrite(EnableLeft, speedL-10); //left wheel
+    digitalWrite(InputOneLeft, HIGH);
+    digitalWrite(InputTwoLeft, LOW);
+   
+  }
+
+void followLine() //function for following the line
+  {
+    speed = 110;
+    speedL = 80;
+
+        sensorR = digitalRead(2); //reading the line sensors
+        sensorL = digitalRead(4);
+    
+        if(sensorR == HIGH && sensorL == HIGH) //if both sensors are on black -> straight
+          {
+            straight();
+          }
+
+        else if(sensorR == LOW && sensorL == LOW) //if both senors are on white/colors -> straight(intersections)
+          {
+            straight();
+          }
+          
+        else if(sensorR == LOW && sensorL == HIGH) //if right sensor on white/colors -> turning right
+          {
+            turnRight();
+          }
+    
+        else if(sensorR == HIGH && sensorL == LOW) //if left sensor on white/colors -> truning left
+          {
+            turnLeft();
+          }
+  }
+
+void colorCounting() //function for couting the colors (coordinate system)
+  {
+    readColor(); //calling the function for detecting the colors
+    
+    if(north == true) //when the car is facing north
+      {
+        switch(status)
+          {
+            case stGreen: //when car changes from green to purple, green plus 1 and status to purple
+      
+              if(cPurple == true)
+                {
+                  green++;
+                  status = stPurple;
+                }
+
+              if(cGreen == true)
+                {
+                  status = stGreen;
+                }
+
+            break;
+
+            case stPurple: //when car changes from purple to green, purple plus 1 and status to green
+
+              if(cGreen == true)
+                {
+                  purple++;
+                  status = stGreen;
+                }
+
+              if(cPurple == true)
+                {
+                  status = stPurple;
+                }
+
+            break;
+          }
+      }
+
+    if(south == true) //when car is facing south
+      {
+        switch(status)
+          {
+            case stGreen: //when car changes from green to purple, green minus 1 and status to purple
+      
+              if(cPurple == true)
+                {
+                  green = green - 1;
+                  status = stPurple;
+                }
+
+              if(cGreen == true)
+                {
+                  status = stGreen;
+                }
+
+            break;
+
+            case stPurple:  //when car changes from purple to green, purple minus 1 and status to green
+
+              if(cGreen == true)
+                {
+                  purple = purple - 1;
+                  status = stGreen;
+                }
+
+              if(cPurple == true)
+                {
+                  status = stPurple;
+                }
+
+            break;
+          }
+      }
+    
+    if(east == true) //when car is facing east
+      {
+        switch(status)
+          {
+            case stTurq: //when car changes from turquoise to orange, turq plus 1 and status to orange
+
+              if(cOrange == true)
+                {
+                  turq++;
+                  status = stOrange;
+                }
+
+              if(cTurq == true)
+                {
+                  status = stTurq;
+                }
+
+            break;
+
+            case stOrange: //when car changesfrom orange to turquoise, orange plus 1 and status to turquoise
+
+              if(cTurq == true)
+                {
+                  orange++;
+                  status = stTurq;
+                }
+              
+              if(cOrange == true)
+                {
+                  status = stOrange;
+                }
+
+            break; 
+          }
+      }
+  
+    if(west == true) //when car is facing west
+      {
+        switch(status)
+          {
+            case stTurq: //when car changes from turquoise to orange, turq minus 1 and status to orange
+
+              if(cOrange == true)
+                {
+                  turq = turq - 1;
+                  status = stOrange;
+                }
+
+              if(cTurq == true)
+                {
+                  status = stTurq;
+                }
+
+            break;
+
+            case stOrange: //when car changesfrom orange to turquoise, orange minus 1 and status to turquoise
+
+              if(cTurq == true)
+                {
+                  orange = orange -1;
+                  status = stTurq;
+                }
+              
+              if(cOrange == true)
+                {
+                  status = stOrange;
+                }
+
+            break; 
+          }
+      }
+  }
+
+void directionRight() //function for changing the direction of the car when turnig to the right
+  {
+    if(north == true)
+      {
+        north = false;
+        south = false;
+        west = false;
+        east = true;
+      }
+
+    if(east == true)
+      {
+        north = false;
+        west = false;
+        east = false;
+        south = true;
+      }
+
+    else if(south == true)
+      {
+        south = false;
+        north = false;
+        west = true;
+        east = false;
+      }
+
+    else if(west == true)
+      {
+        west = false;
+        east = false;
+        south = false;
+        north = true;
+      }
+  }
+
+void directionLeft() //function for changing the direction of the car when turnig to the left
+  {
+    if(north == true)
+      {
+        north = false;
+        west = true;
+      }
+
+    else if(east == true)
+      {
+        east = false;
+        north = true;
+      }
+
+    else if(south == true)
+      {
+        south = false;
+        east = true;
+      }
+
+    else if(west == true)
+      {
+        west = false;
+        south = true;
+      }
+  }
+
+void loop()
+  {
+    switch(turn)
+      {
+      case turnOne: //driving to the first coordinate
+
+        switch(run)
+          {
+            case stStraightNorth: 
+
+              colorCounting();
+              followLine();
+
+              if(y1 > green && y1 > purple)
+                {
+                  run = stStraightNorth;
+                }
+          
+              else if(y1 == green && y1 ==purple)
+                {
+                  run = stSpinNorth;
+                }
+        
+            break;
+
+            case stSpinNorth:
+
+              spinR();
+              readColor();
+
+              if(cTurq == false)
+                {
+                  run = stSpinNorth;
+                }
+
+              else if(cTurq == true)
+                {
+                  run = stStraightEast;
+                  status = stTurq;
+                }
+
+            break;
+
+            case stStraightEast:
+          
+              east = true;
+              north = false;
+              Serial.print("\neast\n");
+              colorCounting();
+              followLine();
+        
+               if(x1 > turq && x1 > orange)
+                {
+                  run = stStraightEast;
+                }
+
+              else if(x1 == turq && x1 == orange)
+                {
+                  stop();
+                  
+                  if(y2 > green)
+                    {
+                      run = stSpinEastLeft;
+                    }
+                  
+                  else if(y2 < green)
+                    {
+                      run = stSpinEast;
+                    }
+
+                  turn = turnTwo;
+
+                }
+
+            break;
+          }
+      
+      break;
+
+      case turnTwo: //driving to the second coordinate
+
+            Serial.print("\n turn Two\n");
+          switch(run)
+            {
+              case stSpinEast:
+                
+                spinR();
+                readColor();
+
+                if(cGreen == false)
+                  {
+                    run = stSpinEast;
+                  }
+                else if(cGreen == true)
+                  {
+                  directionRight();
+                  run = stStraightSouth;
+                  status = stGreen;
+                  }
+
+              break;
+              
+              case stSpinEastLeft:
+
+                spinL();
+                readColor();
+
+                if(cPurple == false)
+                  {
+                    run = stSpinEastLeft;
+                  }
+                else if(cPurple == true)
+                  {
+                  directionLeft();
+                  run = stStraightNorth;
+                  status = stPurple;
+                  }
+
+              break;
+
+              case stStraightNorth:
+                colorCounting();
+                followLine();
+
+                if(y2 > green && y2 > purple)
+                  {
+                    run = stStraightNorth;
+                  }
+          
+                else if(y2 == green && y2 ==purple)
+                  {
+                    if(x2 > turq)
+                      {
+                        run = stSpinNorth;
+                      }
+
+                    if(x2 < turq)
+                      {
+                        run =stSpinNorthLeft;
+                      }
+                  }
+        
+              break;
+
+              case stSpinNorth:
+
+                spinR();
+                readColor();
+
+                if(cTurq == false)
+                  {
+                    run = stSpinNorth;
+                  }
+
+                else if(cTurq == true)
+                  {
+                    directionRight();
+                    run = stStraightEast;
+                    status = stTurq;
+                  }
+
+              break;
+
+              case stSpinNorthLeft:
+
+                spinL();
+                readColor();
+
+                if(cOrange == false)
+                  {
+                    run = stSpinNorthLeft;
+                  }
+
+                else if(cOrange == true)
+                  {
+                    directionLeft();
+                    run = stStraightWest;
+                    status = stOrange;
+                  }
+
+              break;
+
+              case stStraightEast:
+          
+                east = true;
+                north = false;
+                Serial.print("\neast\n");
+                colorCounting();
+                followLine();
+        
+                if(x2 > turq && x2 > orange)
+                  {
+                    run = stStraightEast;
+                  }
+
+                else if(x2 == turq && x2 == orange)
+                  {
+                    stop();
+                  
+                    if(y3 > green)
+                      {
+                        run = stSpinEastLeft;
+                      }
+                  
+                    else if(y3 < green)
+                      {
+                        run = stSpinEast;
+                      }
+                    
+                    turn = turnThree;
+
+                  }
+              break;
+
+              case stStraightSouth:
+                
+                colorCounting();
+                followLine();
+                Serial.print("\nsouth\n");
+
+                if(y2 < green && y2 < purple)
+                  {
+                    run = stStraightSouth;
+                  }
+          
+                if(y2 == green && y2 ==purple)
+                  {
+                    if(x2 < turq)
+                      {
+                        run = stSpinSouth;
+                      }
+                    
+                    else if(x2 > turq)
+                      {
+                        run = stSpinSouthLeft;
+                      }
+                  }
+        
+              break;
+
+              case stSpinSouth:
+
+                spinR();
+                readColor();
+
+                if(cOrange == false)
+                  {
+                    run = stSpinSouth;
+                  }
+                else if(cOrange == true)
+                  {
+                    directionRight();
+                    run = stStraightWest;
+                    status = stOrange;
+                  }
+
+              break;
+
+              case stSpinSouthLeft:
+
+                spinL();
+                readColor();
+
+                if(cTurq == false)
+                  {
+                    run = stSpinSouth;
+                  }
+                else if(cTurq == true)
+                  {
+                    directionRight();
+                    run = stStraightEast;
+                    status = stTurq;
+                  }
+
+              break;
+
+              case stStraightWest:
+
+                colorCounting();
+                followLine();
+        
+                if(x2 < turq && x2 < orange)
+                  {
+                    run = stStraightWest;
+                  }
+
+                if(x2 == turq && x2 == orange)
+                  {
+                    stop();
+
+                    if(y3 < green)
+                        {
+                          run = stSpinWestLeft;
+                        }
+
+                    else if(y3 > green)
+                      {
+                        run = stSpinWest;
+                      }
+
+                      turn = turnThree;
+                  }
+
+              break;
+            }
+      
+      break;
+
+      case turnThree: //driving to the third coordinate
+
+            Serial.print("\n turn Three\n");
+          switch(run)
+            {
+              case stSpinEast:
+                
+                spinR();
+                readColor();
+
+                if(cGreen == false)
+                  {
+                    run = stSpinEast;
+                  }
+                else if(cGreen == true)
+                  {
+                  directionRight();
+                  run = stStraightSouth;
+                  status = stGreen;
+                  }
+
+              break;
+              
+              case stSpinEastLeft:
+
+                spinL();
+                readColor();
+
+                if(cPurple == false)
+                  {
+                    run = stSpinEastLeft;
+                  }
+                else if(cPurple == true)
+                  {
+                  directionLeft();
+                  run = stStraightNorth;
+                  status = stPurple;
+                  }
+
+              break;
+
+              case stStraightNorth:
+                colorCounting();
+                followLine();
+
+                if(y3 > green && y3 > purple)
+                  {
+                    run = stStraightNorth;
+                  }
+          
+                else if(y3 == green && y3 ==purple)
+                  {
+                    if(x3 > turq)
+                      {
+                        run = stSpinNorth;
+                      }
+
+                    if(x3 < turq)
+                      {
+                        run =stSpinNorthLeft;
+                      }
+                  }
+        
+              break;
+
+              case stSpinNorth:
+
+                spinR();
+                readColor();
+
+                if(cTurq == false)
+                  {
+                    run = stSpinNorth;
+                  }
+
+                else if(cTurq == true)
+                  {
+                    directionRight();
+                    run = stStraightEast;
+                    status = stTurq;
+                  }
+
+              break;
+
+              case stSpinNorthLeft:
+
+                spinL();
+                readColor();
+
+                if(cOrange == false)
+                  {
+                    run = stSpinNorthLeft;
+                  }
+
+                else if(cOrange == true)
+                  {
+                    directionLeft();
+                    run = stStraightWest;
+                    status = stOrange;
+                  }
+
+              break;
+
+              case stStraightEast:
+          
+                east = true;
+                north = false;
+                Serial.print("\neast\n");
+                colorCounting();
+                followLine();
+        
+                if(x3 > turq && x3 > orange)
+                  {
+                    run = stStraightEast;
+                  }
+
+                else if(x3 == turq && x3 == orange)
+                  {
+                    stop();
+                  
+                    if(y0 > green)
+                      {
+                        run = stSpinEastLeft;
+                      }
+                  
+                    else if(y0 < green)
+                      {
+                        run = stSpinEast;
+                      }
+                    
+                    turn = turnZero;
+                  }
+              break;
+
+              case stStraightSouth:
+                
+                colorCounting();
+                followLine();
+                Serial.print("\nsouth\n");
+
+                if(y3 < green && y3 < purple)
+                  {
+                    run = stStraightSouth;
+                  }
+          
+                if(y3 == green && y3 ==purple)
+                  {
+                    if(x3 < turq)
+                      {
+                        run = stSpinSouth;
+                      }
+                    
+                    else if(x3 > turq)
+                      {
+                        run = stSpinSouthLeft;
+                      }
+                  }
+        
+              break;
+
+              case stSpinSouth:
+
+                spinR();
+                readColor();
+
+                if(cOrange == false)
+                  {
+                    run = stSpinSouth;
+                  }
+                else if(cOrange == true)
+                  {
+                    directionRight();
+                    run = stStraightWest;
+                    status = stOrange;
+                  }
+
+              break;
+
+              case stSpinSouthLeft:
+
+                spinL();
+                readColor();
+
+                if(cTurq == false)
+                  {
+                    run = stSpinSouth;
+                  }
+                else if(cTurq == true)
+                  {
+                    directionRight();
+                    run = stStraightEast;
+                    status = stTurq;
+                  }
+
+              break;
+
+              case stStraightWest:
+
+                colorCounting();
+                followLine();
+        
+                if(x3 < turq && x3 < orange)
+                  {
+                    run = stStraightWest;
+                  }
+
+                if(x3 == turq && x3 == orange)
+                  {
+                    stop();
+
+                    if(y0 < green)
+                        {
+                          run = stSpinWestLeft;
+                        }
+
+                    else if(y0 = green)
+                      {
+                        run = stStraightWest;
+                      }
+                    turn = turnZero;
+                  }
+
+              break;
+
+              case stSpinWestLeft:
+
+                spinL();
+                readColor();
+
+                if(cGreen == false)
+                  {
+                    run = stSpinWestLeft;
+                  }
+                else if(cGreen == true)
+                  {
+                    directionLeft();
+                    run = stStraightSouth;
+                    status = stGreen;
+                  }
+              break;
+
+              case stSpinWest:
+
+                spinR();
+                readColor();
+
+                if(cPurple == false)
+                  {
+                    run = stSpinWest;
+                  }
+                else if(cPurple == true)
+                  {
+                    directionRight();
+                    run = stStraightNorth;
+                    status = stPurple;
+                  }
+              break;
+            }
+      break;
+
+      case turnZero: //driving to the beginning coordinate
+
+          switch(run)
+            {
+              case stSpinEast:
+                
+                spinR();
+                readColor();
+
+                if(cGreen == false)
+                  {
+                    run = stSpinEast;
+                  }
+                else if(cGreen == true)
+                  {
+                  directionRight();
+                  run = stStraightSouth;
+                  status = stGreen;
+                  }
+
+              break;
+
+              case stStraightSouth:
+                
+                colorCounting();
+                followLine();
+                Serial.print("\nsouth\n");
+
+                if(y0 < green && y0 < purple)
+                  {
+                    run = stStraightSouth;
+                  }
+          
+                if(y0 == green && y0 ==purple)
+                  {
+                    run = stSpinSouth;
+                  }
+        
+              break;
+
+              case stSpinSouth:
+
+                spinR();
+                readColor();
+
+                if(cOrange == false)
+                  {
+                    run = stSpinSouth;
+                  }
+                else if(cOrange == true)
+                  {
+                    directionRight();
+                    run = stStraightWest;
+                    status = stOrange;
+                  }
+
+              break;
+
+              case stStraightWest:
+
+                colorCounting();
+                followLine();
+        
+                if(y0 < turq && y0 < orange)
+                  {
+                    run = stStraightWest;
+                  }
+
+                if(y0 == turq && y0 == orange)
+                  {
+                    stop();
+                  }
+
+              break;
+
+              case stSpinWestLeft:
+
+                spinL();
+                readColor();
+
+                if(cGreen == false)
+                  {
+                    run = stSpinWestLeft;
+                  }
+                else if(cGreen == true)
+                  {
+                    directionLeft();
+                    run = stStraightSouth;
+                    status = stGreen;
+                  }
+              break;
+            }
+
+      break;
+      }
+      
+    Serial.print("\n");           //print the coordinates
+    Serial.print("purple:\t");
+    Serial.print(purple);
+    Serial.print("\n");
+    Serial.print("green:\t");
+    Serial.print(green);
+    Serial.print("\n\n");
+    Serial.print("turq:\t");
+    Serial.print(turq);
+    Serial.print("\n");
+    Serial.print("orange:\t");
+    Serial.print(orange);
+    Serial.print("\n");
+  }
